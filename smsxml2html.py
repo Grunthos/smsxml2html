@@ -51,7 +51,7 @@ STYLESHEET_TEMPLATE = """
 class SMSMsg:
 	def __init__(self, timestamp, text, type_, extra):
 		self.timestamp = timestamp
-		if isinstance(text, str) :
+		if not isinstance(text, str) :
 			self.text = text.decode('utf8')
 		else :
 			self.text = text
@@ -87,7 +87,10 @@ class MMSMsg(SMSMsg):
 def parseCarrierNumber(number):
 	number = re.sub('[^0-9]', '', number)
 	if len(number) == 10:
-		number = '1' + number
+		if number[0:1] == "0":
+			number = "61" + number[1:]
+		else:
+			number = 'X' + number
 	return number
 	
 def parseConversations(root, conversations, users, base_path, carrier_number):
@@ -120,6 +123,8 @@ def parseConversations(root, conversations, users, base_path, carrier_number):
 					for part_child in mms_child:
 						if part_child.tag == 'part':
 							part_name = part_child.attrib['name']
+							if part_name == "null":
+								part_name = part_child.attrib['cl']
 							part_data = part_child.attrib['data'] if 'data' in part_child.attrib else ""
 							part_text = part_child.attrib['text'] if 'text' in part_child.attrib else ""
 							part_mime = part_child.attrib['ct']
@@ -133,7 +138,7 @@ def parseConversations(root, conversations, users, base_path, carrier_number):
 							parsed_child_address = parseCarrierNumber(addr_child.attrib['address'])
 							if carrier_number not in parsed_child_address:
 								addresses[parsed_child_address] = addr_child.attrib['type']
-				for address, type_ in addresses.iteritems():
+				for address, type_ in addresses.items():
 					save_msg.address = address
 					save_msg.type_ = type_
 					save_msg.timestamp = date
@@ -151,12 +156,12 @@ def dumpConversations(base_path, conversations, carrier_number):
 	with open(os.path.join(base_path, 'stylesheet.css'), 'w') as f:
 		f.write(STYLESHEET_TEMPLATE)
 	
-	for address, conversation in conversations.iteritems():
+	for address, conversation in conversations.items():
 		output_path = os.path.join(base_path, address + '.html')
 
-		with open(output_path, 'w') as f:
+		with open(output_path, 'wb') as f:
 		
-			f.write('<html><head><meta charset="UTF-8"><link rel="stylesheet" type="text/css" href="stylesheet.css" /></head><body>' + "\n")
+			f.write(b'<html><head><meta charset="UTF-8"><link rel="stylesheet" type="text/css" href="stylesheet.css" /></head><body>' + b"\n")
 
 			# Generate the TOC
 			prev_month_year = ""
@@ -165,7 +170,7 @@ def dumpConversations(base_path, conversations, carrier_number):
 			for date in sorted(conversation.keys()):
 				msg = conversation[date]
 				dt = datetime.datetime.utcfromtimestamp(msg.timestamp / 1000)
-				month_year = dt.strftime('%B %Y').decode(locale.getpreferredencoding())
+				month_year = dt.strftime('%B %Y') # pjw .decode(locale.getpreferredencoding())
 				if month_year != prev_month_year:
 					month_year_short = dt.strftime('%y%m')
 					months.append(month_year)
@@ -173,35 +178,38 @@ def dumpConversations(base_path, conversations, carrier_number):
 				prev_month_year = month_year
 					
 			# Generate the TOC
-			f.write('<div class="toc"><ul>')
+			f.write(b'<div class="toc"><ul>')
 			for month_year in months:
-				f.write('<li><a href="#%s">%s</a>' % (month_amap[month_year], month_year.encode('utf8')))
-			f.write('</ul></div>')
+				f.write(('<li><a href="#%s">%s</a>' % (month_amap[month_year], month_year)).encode('utf8'))
+				#f.write('<li><a href="#%s">%s</a>' % (month_amap[month_year], month_year))
+			f.write(b'</ul></div>')
 
 			# Generate the body
 			prev_month_year = ""
 			for date in sorted(conversation.keys()):
 				msg = conversation[date]
 				dt = datetime.datetime.utcfromtimestamp(msg.timestamp / 1000)
-				month_year = dt.strftime('%B %Y').decode(locale.getpreferredencoding())
+				month_year = dt.strftime('%B %Y') #pjw .decode(locale.getpreferredencoding())
 				if month_year != prev_month_year:
 					if prev_month_year != '':
-						f.write('</table>')
-					f.write('<a name="%s"></a>' % (month_amap[month_year]))
-					f.write("<h2>%s</h2>\n" % (month_year.encode('utf8')))
-					f.write('<table class="month_convos">')
-				f.write('<tr>')
-				f.write('<td><b><span class="msg_date">%s</span></td><td><span class="msg_sender_%s">%s %s</span></b></td><td>%s' % (dt.strftime('%m/%d/%y %I:%M:%S%p'), msg.type_, '<<' if msg.type_ == "1" else '>>', address if msg.type_ == "1" else carrier_number, msg.text.encode('utf8')))
+						f.write(b'</table>')
+					f.write(('<a name="%s"></a>' % (month_amap[month_year])).encode('utf8'))
+					f.write(("<h2>%s</h2>\n" % (month_year.encode('utf8'))).encode('utf8'))
+					#f.write(("<h2>%s</h2>\n" % (month_year)).encode('utf8'))
+					f.write(b'<table class="month_convos">')
+				f.write(b'<tr>')
+				f.write(('<td><b><span class="msg_date">%s</span></td><td><span class="msg_sender_%s">%s %s</span></b></td><td>%s' % (dt.strftime('%m/%d/%y %I:%M:%S%p'), msg.type_, '<<' if msg.type_ == "1" else '>>', address if msg.type_ == "1" else carrier_number, msg.text)).encode('utf8'))
+				#f.write(b'<td><b><span class="msg_date">%s</span></td><td><span class="msg_sender_%s">%s %s</span></b></td><td>%s' % (dt.strftime('%m/%d/%y %I:%M:%S%p'), msg.type_, '<<' if msg.type_ == "1" else '>>', address if msg.type_ == "1" else carrier_number, msg.text))
 				if isinstance(msg, MMSMsg):
-					f.write('<br />')
+					f.write(b'<br />')
 					for image in msg.images:
-						f.write('<a href="%s"><img class="mms_img" src="%s" /></a> ' % (image, image))
-				f.write('</td></tr>')
-				f.write("</tr>\n")
+						f.write(('<a href="%s"><img class="mms_img" src="%s" /></a> ' % (image, image)).encode('utf8'))
+				f.write(b'</td></tr>')
+				f.write(b"</tr>\n")
 				prev_month_year = month_year
 
-			f.write("</table>\n")
-			f.write("</body></html>")
+			f.write(b"</table>\n")
+			f.write(b"</body></html>")
 		files += 1
 	return files
 
